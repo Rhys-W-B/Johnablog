@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
+import { db } from "./firebaseConfig";
+import { collection, addDoc, onSnapshot, query, orderBy, Timestamp, deleteDoc, doc } from "firebase/firestore";
 
 interface Post {
-  id: number;
+  id: string;
   title: string;
   text: string;
   image?: string;
@@ -14,25 +16,46 @@ interface Post {
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [image, setImage] = useState<string | undefined>(undefined);
 
-  const handleAddPost = () => {
+  const [postToDelete, setPostToDelete] = useState<Post | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+
+  const postsRef = collection(db, "posts");
+  const ADMIN_PASSWORD = "pesto0322"; // <--- change this to whatever you want
+
+  // Listen for real-time updates
+  useEffect(() => {
+    const q = query(postsRef, orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const postsData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<Post, "id">),
+      }));
+      setPosts(postsData);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleAddPost = async () => {
     if (!title.trim() || !text.trim()) {
       alert("Both title and text are required.");
       return;
     }
 
-    const newPost: Post = {
-      id: Date.now(),
+    await addDoc(postsRef, {
       title: title.trim(),
       text: text.trim(),
-      image,
-      createdAt: new Date().toLocaleString(),
-    };
+      image: image || "",
+      createdAt: new Date().toISOString(),
+    });
 
-    setPosts([newPost, ...posts]);
     setTitle("");
     setText("");
     setImage(undefined);
@@ -48,25 +71,74 @@ export default function Home() {
     }
   };
 
+  const handleDeleteClick = (post: Post) => {
+    if (!isAuthenticated) return;
+    setPostToDelete(post);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (postToDelete) {
+      await deleteDoc(doc(db, "posts", postToDelete.id));
+      setPostToDelete(null);
+      setIsDeleteModalOpen(false);
+    }
+  };
+
+  const handlePasswordSubmit = () => {
+    if (passwordInput === ADMIN_PASSWORD) {
+      setIsAuthenticated(true);
+      setIsPasswordModalOpen(false);
+      setPasswordInput("");
+    } else {
+      alert("Incorrect password");
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center p-4 font-sans">
-      {/* Header */}
+    <div className="min-h-screen bg-white flex flex-col items-center p-4 font-sans relative">
+      {/* Top-right Login Button */}
       <button
-        onClick={() => setIsModalOpen(true)}
-        className="bg-black text-white px-6 py-2 rounded-md mt-6 mb-8 hover:bg-gray-800 transition w-full max-w-xs sm:max-w-sm"
+        onClick={() => setIsPasswordModalOpen(true)}
+        className="absolute top-4 right-4 text-sm bg-gray-200 hover:bg-gray-300 text-black px-3 py-1.5 rounded-md"
       >
-        New Post
+        {isAuthenticated ? "Logged In" : "Login"}
       </button>
+
+      {/* Header */}
+      {isAuthenticated && (
+        <button
+          onClick={() => isAuthenticated && setIsModalOpen(true)}
+          disabled={!isAuthenticated}
+          className={`${
+            isAuthenticated ? "bg-black hover:bg-gray-800" : "bg-gray-400 cursor-not-allowed"
+          } text-white px-6 py-2 rounded-md mt-6 mb-8 transition w-full max-w-xs sm:max-w-sm`}
+        >
+          New Post
+        </button>
+      )}
 
       {/* Blog Posts */}
       <div className="w-full max-w-2xl flex flex-col gap-6 pb-12">
         {posts.length === 0 && (
-          <p className="text-gray-500 text-center text-sm sm:text-base">No posts yet. Create one above!</p>
+          <p className="text-gray-500 text-center text-sm sm:text-base">
+            No posts yet. {isAuthenticated ? "Create one above!" : "Login to create posts."}
+          </p>
         )}
         {posts.map((post) => (
-          <div key={post.id} className="border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6">
+          <div key={post.id} className="border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 relative">
+            {/* Delete Button */}
+            {isAuthenticated && (
+              <button
+                onClick={() => handleDeleteClick(post)}
+                className="absolute top-3 right-3 text-red-500 hover:text-red-700 text-sm"
+              >
+                Delete
+              </button>
+            )}
+
             <h2 className="text-xl sm:text-2xl font-semibold mb-1 text-gray-900">{post.title}</h2>
-            <p className="text-xs sm:text-sm text-gray-500 mb-3">{post.createdAt}</p>
+            <p className="text-xs sm:text-sm text-gray-500 mb-3">{new Date(post.createdAt).toLocaleString()}</p>
 
             {post.image && (
               <Image
@@ -82,7 +154,7 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Modal */}
+      {/* Create Post Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white w-full max-w-md rounded-xl p-6 sm:p-8 relative shadow-lg">
@@ -123,6 +195,57 @@ export default function Home() {
                 className="px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 w-full sm:w-auto text-sm sm:text-base"
               >
                 Add Post
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && postToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-sm rounded-xl p-6 text-center shadow-lg">
+            <h2 className="text-lg font-semibold mb-3">Delete "{postToDelete.title}"?</h2>
+            <p className="text-gray-600 mb-6 text-sm">This action cannot be undone.</p>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2 border border-gray-400 rounded-md hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button onClick={confirmDelete} className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Modal */}
+      {isPasswordModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-sm rounded-xl p-6 text-center shadow-lg">
+            <h2 className="text-lg font-semibold mb-4">Enter Admin Password</h2>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              className="w-full border border-gray-300 rounded-md p-2 mb-4 focus:outline-none focus:ring-2 focus:ring-black text-sm"
+              placeholder="Password"
+            />
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={() => setIsPasswordModalOpen(false)}
+                className="px-4 py-2 border border-gray-400 rounded-md hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordSubmit}
+                className="px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800"
+              >
+                Submit
               </button>
             </div>
           </div>
