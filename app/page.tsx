@@ -372,7 +372,7 @@ export default function Home() {
             </section>
 
             {/* RIGHT GAUGE PAGE (list of right gauges) */}
-            <section className="snap-center shrink-0 w-full lg:w-1/3 flex flex-col gap-6 justify-start items-center p-6 bg-gray-50">
+            <section className="snap-center shrink-0 w-full lg:w-1/3 flex flex-col gap-6 justify-start items-center p-6 ">
               {rightGauges.length === 0 && (
                 <p className="text-gray-500 text-center text-sm sm:text-base">
                   No right gauges yet. {isAuthenticated ? "Create one!" : "Login to add gauges."}

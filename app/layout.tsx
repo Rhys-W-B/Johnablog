@@ -24,6 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      color-scheme: light;
       <head>
         <meta name="theme-color" content="#ffffff" />
       </head>
