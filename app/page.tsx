@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { db } from "./firebaseConfig";
 import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc } from "firebase/firestore";
@@ -25,6 +25,9 @@ interface Gauge {
 }
 
 export default function Home() {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [currentPage, setCurrentPage] = useState(1); // 0=left, 1=middle, 2=right
+
   // Posts state (unchanged)
   const [posts, setPosts] = useState<Post[]>([]);
   const postsRef = collection(db, "posts");
@@ -63,6 +66,30 @@ export default function Home() {
 
   const [editingGauge, setEditingGauge] = useState<Gauge | null>(null);
   const [gaugeToDelete, setGaugeToDelete] = useState<Gauge | null>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      const width = scrollRef.current.clientWidth;
+      scrollRef.current.scrollTo({ left: width, behavior: "instant" }); // page 2
+    }
+  }, []);
+
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const width = scrollRef.current.clientWidth;
+    const scrollLeft = scrollRef.current.scrollLeft;
+
+    // Snap logic
+    const page = Math.round(scrollLeft / width);
+
+    // Prevent skipping over middle page (only move one step)
+    if (Math.abs(page - currentPage) > 1) {
+      const target = currentPage > page ? currentPage - 1 : currentPage + 1;
+      scrollRef.current.scrollTo({ left: target * width, behavior: "smooth" });
+    } else {
+      setCurrentPage(page);
+    }
+  };
 
   // --- Realtime Firestore Sync for posts & gauges ---
   useEffect(() => {
@@ -297,7 +324,11 @@ export default function Home() {
 
         {/* --- SWIPE CONTAINER --- */}
         <div className="flex w-full max-w-6xl h-[calc(100vh-8rem)] lg:h-auto">
-          <div className="flex lg:flex-row flex-nowrap overflow-x-auto lg:overflow-visible snap-x snap-mandatory scroll-smooth w-full">
+          <div
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="scroll-snap-container flex lg:flex-row flex-nowrap overflow-x-scroll lg:overflow-visible snap-x snap-mandatory scroll-smooth w-full"
+          >
             {/* LEFT GAUGE PAGE (list of left gauges) */}
             <section className="snap-center shrink-0 w-full lg:w-1/3 flex flex-col gap-6 justify-start items-center p-6">
               {leftGauges.length === 0 && (
