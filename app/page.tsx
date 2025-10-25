@@ -141,6 +141,16 @@ export default function Home() {
           {isAuthenticated ? "Logged In" : "Login"}
         </button>
 
+        {/* Header */}
+        {isAuthenticated && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-black hover:bg-gray-800 text-white px-6 py-2 rounded-md mt-6 mb-8 transition w-full max-w-xs sm:max-w-sm"
+          >
+            New Post
+          </button>
+        )}
+
         {/* Blog Posts */}
         <div className="w-full max-w-2xl flex flex-col gap-6 pb-12">
           {posts.length === 0 && (
